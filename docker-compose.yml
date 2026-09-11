@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  mcp-server:
+    build: .
+    container_name: japan-job-research-mcp
+    env_file:
+      - .env
+    stdin_open: true    # stdio transport ke liye zaroori
+    tty: true
+    volumes:
+      - .:/app          # code change turant reflect ho, rebuild na karna pade

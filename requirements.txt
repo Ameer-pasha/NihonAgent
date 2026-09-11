@@ -1,0 +1,8 @@
+langchain-core
+langchain-ollama
+langgraph
+mcp
+tavily-python
+python-dotenv
+requests
+beautifulsoup4
