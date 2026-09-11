@@ -1,65 +1,76 @@
+# graph.py
+import sys
 import asyncio
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage
+from typing import Literal
+from langgraph.graph import StateGraph, START, END
 
 from state import AgentState
-from nodes import agent_node, tool_node, extraction_node, should_continue
+from nodes import agent_node, tool_node, extractor_node, evaluator_node
+from langchain_core.messages import HumanMessage
+from schemas import CompanyResearchBrief
 
 
-graph = StateGraph(AgentState)
+def should_continue_tools(state: AgentState) -> Literal["tools", "extractor"]:
+    loops = state.get("loop_count", 0) or 0
+    if loops >= 5:
+        return "extractor"
+        
+    messages = state.get("messages", [])
+    if not messages:
+        return "extractor"
+        
+    last_message = messages[-1]
+    if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
+        return "tools"
+    return "extractor"
 
-graph.add_node("agent", agent_node)
-graph.add_node("tools", tool_node)
-graph.add_node("extract", extraction_node)
 
-graph.set_entry_point("agent")
+def should_continue_eval(state: AgentState) -> Literal["agent", "__end__"]:
+    if state.get("is_complete", True):
+        return "__end__"
+    return "agent"
 
-graph.add_conditional_edges(
+
+# Build State Graph
+builder = StateGraph(AgentState)
+
+builder.add_node("agent", agent_node)
+builder.add_node("tools", tool_node)
+builder.add_node("extractor", extractor_node)
+builder.add_node("evaluator", evaluator_node)
+
+builder.add_edge(START, "agent")
+builder.add_conditional_edges(
     "agent",
-    should_continue,
+    should_continue_tools,
     {
         "tools": "tools",
+        "extractor": "extractor"
+    }
+)
+builder.add_edge("tools", "agent")
+builder.add_edge("extractor", "evaluator")
+builder.add_conditional_edges(
+    "evaluator",
+    should_continue_eval,
+    {
         "agent": "agent",
-        "extract": "extract"
+        "__end__": END
     }
 )
 
-graph.add_edge("tools", "agent")
-graph.add_edge("extract", END)
-
-app = graph.compile()
+graph = builder.compile()
 
 
-async def main():
-    result = await app.ainvoke({
-        "messages": [
-            HumanMessage(content="Search for Fast Retailing AI engineer jobs in Japan")
-        ],
-        "company_name": "Fast Retailing",
-        "job_role": "AI Engineer",
-        "search_attempts": 0
-    })
-
-    # DEBUG: poori conversation dikhao
-    print("\n--- MESSAGE TRACE ---")
-    for msg in result["messages"]:
-        print(type(msg).__name__, ":", getattr(msg, "content", "")[:200])
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            print("   TOOL CALLS:", msg.tool_calls)
-
-    print("\n--- FINAL BRIEF ---")
-    print("Visa Sponsorship:", result.get("visa_sponsorship"))
-    print("Tech Stack:", result.get("tech_stack"))
-    print("Salary Band:", result.get("salary_band"))
-    print("Recent News:", result.get("recent_news"))
-    print("Open Roles:", result.get("open_roles"))
-    print("Sources:", result.get("sources"))
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-
-
-
-
+async def run_research(query: str) -> CompanyResearchBrief:
+    """Executes the agent for any free-form natural language query."""
+    initial_state = {
+        "messages": [HumanMessage(content=query)],
+        "brief": None,
+        "query": query,
+        "loop_count": 0,
+        "is_complete": False
+    }
+    
+    final_state = await graph.ainvoke(initial_state)
+    return final_state.get("brief", CompanyResearchBrief())

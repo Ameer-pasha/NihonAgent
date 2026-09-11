@@ -1,12 +1,37 @@
-version: "3.9"
-
 services:
+  # Service 1: FastMCP Tool Server
   mcp-server:
     build: .
-    container_name: japan-job-research-mcp
-    env_file:
-      - .env
-    stdin_open: true    # stdio transport ke liye zaroori
-    tty: true
-    volumes:
-      - .:/app          # code change turant reflect ho, rebuild na karna pade
+    container_name: nihon_mcp_server
+    command: python mcp_server/server.py
+    ports:
+      - "8000:8000"
+    environment:
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+    restart: unless-stopped
+    networks:
+      - nihon-network
+
+  # Service 2: LangGraph Web UI & API
+  nihon-api:
+    build: .
+    container_name: nihon_agent_api
+    command: uvicorn app:app --host 0.0.0.0 --port 5000
+    ports:
+      - "5000:5000"
+    environment:
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:latest}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - MCP_SERVER_URL=http://mcp-server:8000/sse
+    depends_on:
+      - mcp-server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - nihon-network
+
+networks:
+  nihon-network:
+    driver: bridge
