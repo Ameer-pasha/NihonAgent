@@ -1,8 +1,11 @@
 langchain-core
 langchain-ollama
+langchain-mcp-adapters
 langgraph
 mcp
+httpx
 tavily-python
+ddgs
 python-dotenv
 requests
 beautifulsoup4

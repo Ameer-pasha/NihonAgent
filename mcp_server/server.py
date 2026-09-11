@@ -35,4 +35,5 @@ def duckduckgo_web_search(query: str) -> dict:
     return duckduckgo_search.invoke({"query": query})
 
 if __name__ == "__main__":
+    print("MCP server 'japan-job-research' listening on http://0.0.0.0:8000/sse", flush=True)
     mcp.run(transport="sse")
